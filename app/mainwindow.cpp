@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2022 Gary Wang <wzc782970009@gmail.com>
+//
+// SPDX-License-Identifier: MIT
+
 #include "mainwindow.h"
 
 #include "settings.h"
@@ -29,13 +33,20 @@
 #include <QTimer>
 #include <QFileDialog>
 #include <QStandardPaths>
+#include <QStringBuilder>
 #include <QProcess>
 #include <QDesktopServices>
+#include <QMessageBox>
+
+#ifdef HAVE_QTDBUS
+#include <QDBusInterface>
+#include <QDBusConnectionInterface>
+#endif // HAVE_QTDBUS
 
 MainWindow::MainWindow(QWidget *parent)
     : FramelessWindow(parent)
     , m_am(new ActionManager)
-    , m_pm(new PlaylistManager(PlaylistManager::PL_SAMEFOLDER, this))
+    , m_pm(new PlaylistManager(this))
 {
     if (Settings::instance()->stayOnTop()) {
         this->setWindowFlag(Qt::WindowStaysOnTopHint);
@@ -45,8 +56,9 @@ MainWindow::MainWindow(QWidget *parent)
     this->setMinimumSize(350, 330);
     this->setWindowIcon(QIcon(":/icons/app-icon.svg"));
     this->setMouseTracking(true);
+    this->setAcceptDrops(true);
 
-    m_pm->setAutoLoadFilterSuffix({"*.jpg", "*.jpeg", "*.jfif", "*.png", "*.gif", "*.svg", "*.bmp", "*.webp"});
+    m_pm->setAutoLoadFilterSuffixes(supportedImageFormats());
 
     m_fadeOutAnimation = new QPropertyAnimation(this, "windowOpacity");
     m_fadeOutAnimation->setDuration(300);
@@ -59,7 +71,11 @@ MainWindow::MainWindow(QWidget *parent)
     m_exitAnimationGroup->addAnimation(m_fadeOutAnimation);
     m_exitAnimationGroup->addAnimation(m_floatUpAnimation);
     connect(m_exitAnimationGroup, &QParallelAnimationGroup::finished,
+#ifdef Q_OS_MAC
+            this, &QWidget::hide);
+#else
             this, &QWidget::close);
+#endif
 
     GraphicsScene * scene = new GraphicsScene(this);
 
@@ -74,7 +90,7 @@ MainWindow::MainWindow(QWidget *parent)
     m_gv->fitInView(m_gv->sceneRect(), Qt::KeepAspectRatio);
 
     connect(m_graphicsView, &GraphicsView::navigatorViewRequired,
-            this, [ = ](bool required, QTransform tf){
+            this, [ = ](bool required, const QTransform & tf){
         m_gv->setTransform(GraphicsView::resetScale(tf));
         m_gv->fitInView(m_gv->sceneRect(), Qt::KeepAspectRatio);
         m_gv->setVisible(required);
@@ -84,24 +100,22 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_graphicsView, &GraphicsView::viewportRectChanged,
             m_gv, &NavigatorView::updateMainViewportRegion);
 
-    connect(m_graphicsView, &GraphicsView::requestGallery,
-            this, &MainWindow::loadGalleryBySingleLocalFile);
-
     m_closeButton = new ToolButton(true, m_graphicsView);
-    m_closeButton->setIcon(QIcon(":/icons/window-close"));
-    m_closeButton->setIconSize(QSize(50, 50));
+    m_closeButton->setIconSize(QSize(32, 32));
+    m_closeButton->setFixedSize(QSize(50, 50));
+    m_closeButton->setIconResourcePath(":/icons/window-close.svg");
 
     connect(m_closeButton, &QAbstractButton::clicked,
             this, &MainWindow::closeWindow);
 
     m_prevButton = new ToolButton(false, m_graphicsView);
-    m_prevButton->setIcon(QIcon(":/icons/go-previous"));
     m_prevButton->setIconSize(QSize(75, 75));
+    m_prevButton->setIconResourcePath(":/icons/go-previous.svg");
     m_prevButton->setVisible(false);
     m_prevButton->setOpacity(0, false);
     m_nextButton = new ToolButton(false, m_graphicsView);
-    m_nextButton->setIcon(QIcon(":/icons/go-next"));
     m_nextButton->setIconSize(QSize(75, 75));
+    m_nextButton->setIconResourcePath(":/icons/go-next.svg");
     m_nextButton->setVisible(false);
     m_nextButton->setOpacity(0, false);
 
@@ -125,10 +139,13 @@ MainWindow::MainWindow(QWidget *parent)
     m_gv->setOpacity(0, false);
     m_closeButton->setOpacity(0, false);
 
-    connect(m_pm, &PlaylistManager::loaded, this, [this](int galleryFileCount) {
+    connect(m_pm, &PlaylistManager::totalCountChanged, this, [this](int galleryFileCount) {
         m_prevButton->setVisible(galleryFileCount > 1);
         m_nextButton->setVisible(galleryFileCount > 1);
     });
+
+    connect(m_pm->model(), &PlaylistModel::modelReset, this, std::bind(&MainWindow::galleryCurrent, this, false, false));
+    connect(m_pm, &PlaylistManager::currentIndexChanged, this, std::bind(&MainWindow::galleryCurrent, this, true, false));
 
     QShortcut * fullscreenShorucut = new QShortcut(QKeySequence(QKeySequence::FullScreen), this);
     connect(fullscreenShorucut, &QShortcut::activated,
@@ -138,7 +155,15 @@ MainWindow::MainWindow(QWidget *parent)
 
     QTimer::singleShot(0, this, [this](){
         m_am->setupShortcuts();
+        Settings::instance()->applyUserShortcuts(this);
     });
+
+    // allow some mouse events can go through these widgets for resizing window.
+    installResizeCapture(m_closeButton);
+    installResizeCapture(m_graphicsView);
+    installResizeCapture(m_graphicsView->viewport());
+    installResizeCapture(m_gv);
+    installResizeCapture(m_gv->viewport());
 }
 
 MainWindow::~MainWindow()
@@ -149,13 +174,8 @@ MainWindow::~MainWindow()
 void MainWindow::showUrls(const QList<QUrl> &urls)
 {
     if (!urls.isEmpty()) {
-        if (urls.count() == 1) {
-            m_graphicsView->showFileFromPath(urls.first().toLocalFile(), true);
-        } else {
-            m_graphicsView->showFileFromPath(urls.first().toLocalFile(), false);
-            m_pm->setPlaylist(urls);
-            m_pm->setCurrentIndex(0);
-        }
+        m_graphicsView->showFileFromPath(urls.first().toLocalFile());
+        m_pm->loadPlaylist(urls);
     } else {
         m_graphicsView->showText(tr("File url list is empty"));
         return;
@@ -181,7 +201,7 @@ void MainWindow::initWindowSize()
 
 void MainWindow::adjustWindowSizeBySceneRect()
 {
-    if (m_pm->count() < 1) return;
+    if (m_pm->totalCount() < 1) return;
 
     QSize sceneSize = m_graphicsView->sceneRect().toRect().size();
     QSize sceneSizeWithMargins = sceneSize + QSize(130, 125);
@@ -212,44 +232,55 @@ void MainWindow::adjustWindowSizeBySceneRect()
 // can be empty if it is NOT from a local file.
 QUrl MainWindow::currentImageFileUrl() const
 {
-    QUrl url;
-    std::tie(std::ignore, url) = m_pm->currentFileUrl();
-
-    return url;
+    return m_pm->urlByIndex(m_pm->curIndex());
 }
 
 void MainWindow::clearGallery()
 {
-    m_pm->clear();
-}
-
-void MainWindow::loadGalleryBySingleLocalFile(const QString &path)
-{
-    m_pm->setCurrentFile(path);
+    m_pm->setPlaylist({});
 }
 
 void MainWindow::galleryPrev()
 {
-    int index;
-    QString filePath;
-    std::tie(index, filePath) = m_pm->previousFile();
-
-    if (index >= 0) {
-        m_graphicsView->showFileFromPath(filePath, false);
+    QModelIndex index = m_pm->previousIndex();
+    if (index.isValid()) {
         m_pm->setCurrentIndex(index);
+        m_graphicsView->showFileFromPath(m_pm->localFileByIndex(index));
     }
 }
 
 void MainWindow::galleryNext()
 {
-    int index;
-    QString filePath;
-    std::tie(index, filePath) = m_pm->nextFile();
-
-    if (index >= 0) {
-        m_graphicsView->showFileFromPath(filePath, false);
+    QModelIndex index = m_pm->nextIndex();
+    if (index.isValid()) {
         m_pm->setCurrentIndex(index);
+        m_graphicsView->showFileFromPath(m_pm->localFileByIndex(index));
     }
+}
+
+// Only use this to update minor information.
+void MainWindow::galleryCurrent(bool showLoadImageHintWhenEmpty, bool reloadImage)
+{
+    QModelIndex index = m_pm->curIndex();
+    if (index.isValid()) {
+        if (reloadImage) m_graphicsView->showFileFromPath(m_pm->localFileByIndex(index));
+        setWindowTitle(m_pm->urlByIndex(index).fileName());
+    } else if (showLoadImageHintWhenEmpty && m_pm->totalCount() <= 0) {
+        m_graphicsView->showText(QCoreApplication::translate("GraphicsScene", "Drag image here"));
+    }
+}
+
+QStringList MainWindow::supportedImageFormats()
+{
+    QStringList formatFilters {
+#if QT_VERSION < QT_VERSION_CHECK(6, 8, 0)
+        QStringLiteral("*.jfif")
+#endif // QT_VERSION < QT_VERSION_CHECK(6, 8, 0)
+    };
+    for (const QByteArray &item : QImageReader::supportedImageFormats()) {
+        formatFilters.append(QStringLiteral("*.") % QString::fromLocal8Bit(item));
+    }
+    return formatFilters;
 }
 
 void MainWindow::showEvent(QShowEvent *event)
@@ -298,14 +329,14 @@ void MainWindow::mousePressEvent(QMouseEvent *event)
 
 void MainWindow::mouseMoveEvent(QMouseEvent *event)
 {
-    if (event->buttons() & Qt::LeftButton && m_clickedOnWindow && !isMaximized()) {
-#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+    if (event->buttons() & Qt::LeftButton && m_clickedOnWindow && !isMaximized() && !isFullScreen()) {
         if (!window()->windowHandle()->startSystemMove()) {
-            move(event->globalPos() - m_oldMousePos);
-        }
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+            move(event->globalPosition().toPoint() - m_oldMousePos);
 #else
-        move(event->globalPos() - m_oldMousePos);
-#endif // QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+            move(event->globalPos() - m_oldMousePos);
+#endif // QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+        }
         event->accept();
     }
 
@@ -343,6 +374,10 @@ void MainWindow::mouseDoubleClickEvent(QMouseEvent *event)
         break;
     case Settings::DoubleClickBehavior::Maximize:
         toggleMaximize();
+        event->accept();
+        break;
+    case Settings::DoubleClickBehavior::FullScreen:
+        toggleFullscreen();
         event->accept();
         break;
     case Settings::DoubleClickBehavior::Ignore:
@@ -408,12 +443,15 @@ void MainWindow::contextMenuEvent(QContextMenuEvent *event)
     QAction * copyPixmap = m_am->actionCopyPixmap;
     QAction * copyFilePath = m_am->actionCopyFilePath;
 
+    copyMenu->setIcon(QIcon::fromTheme(QLatin1String("edit-copy")));
     copyMenu->addAction(copyPixmap);
     if (currentFileUrl.isValid()) {
         copyMenu->addAction(copyFilePath);
     }
 
     QAction * paste = m_am->actionPaste;
+
+    QAction * trash = m_am->actionTrash;
 
     QAction * stayOnTopMode = m_am->actionToggleStayOnTop;
     stayOnTopMode->setCheckable(true);
@@ -422,6 +460,10 @@ void MainWindow::contextMenuEvent(QContextMenuEvent *event)
     QAction * protectedMode = m_am->actionToggleProtectMode;
     protectedMode->setCheckable(true);
     protectedMode->setChecked(m_protectedMode);
+
+    QAction * avoidResetTransform = m_am->actionToggleAvoidResetTransform;
+    avoidResetTransform->setCheckable(true);
+    avoidResetTransform->setChecked(m_graphicsView->avoidResetTransform());
 
     QAction * toggleSettings = m_am->actionSettings;
     QAction * helpAction = m_am->actionHelp;
@@ -451,12 +493,14 @@ void MainWindow::contextMenuEvent(QContextMenuEvent *event)
     menu->addSeparator();
     menu->addAction(stayOnTopMode);
     menu->addAction(protectedMode);
+    menu->addAction(avoidResetTransform);
     menu->addSeparator();
     menu->addAction(toggleSettings);
     menu->addAction(helpAction);
     if (currentFileUrl.isValid()) {
         menu->addSeparator();
         if (currentFileUrl.isLocalFile()) {
+            menu->addAction(trash);
             menu->addAction(m_am->actionLocateInFileManager);
         }
         menu->addAction(propertiesAction);
@@ -468,6 +512,50 @@ void MainWindow::contextMenuEvent(QContextMenuEvent *event)
     return FramelessWindow::contextMenuEvent(event);
 }
 
+void MainWindow::dragEnterEvent(QDragEnterEvent *event)
+{
+    if (event->mimeData()->hasUrls() || event->mimeData()->hasImage() || event->mimeData()->hasText()) {
+        event->acceptProposedAction();
+    } else {
+        event->ignore();
+    }
+
+    return FramelessWindow::dragEnterEvent(event);
+}
+
+void MainWindow::dragMoveEvent(QDragMoveEvent *event)
+{
+    Q_UNUSED(event)
+}
+
+void MainWindow::dropEvent(QDropEvent *event)
+{
+    event->acceptProposedAction();
+
+    const QMimeData * mimeData = event->mimeData();
+
+    if (mimeData->hasUrls()) {
+        const QList<QUrl> &urls = mimeData->urls();
+        if (urls.isEmpty()) {
+            m_graphicsView->showText(tr("File url list is empty"));
+        } else {
+            showUrls(urls);
+        }
+    } else if (mimeData->hasImage()) {
+        QImage img = qvariant_cast<QImage>(mimeData->imageData());
+        QPixmap pixmap = QPixmap::fromImage(img);
+        if (pixmap.isNull()) {
+            m_graphicsView->showText(tr("Image data is invalid"));
+        } else {
+            m_graphicsView->showImage(pixmap);
+        }
+    } else if (mimeData->hasText()) {
+        m_graphicsView->showText(mimeData->text());
+    } else {
+        m_graphicsView->showText(tr("Not supported mimedata: %1").arg(mimeData->formats().first()));
+    }
+}
+
 void MainWindow::centerWindow()
 {
     this->setGeometry(
@@ -475,7 +563,7 @@ void MainWindow::centerWindow()
             Qt::LeftToRight,
             Qt::AlignCenter,
             this->size(),
-            qApp->screenAt(QCursor::pos())->geometry()
+            qApp->screenAt(QCursor::pos())->availableGeometry()
         )
     );
 }
@@ -513,6 +601,11 @@ void MainWindow::toggleStayOnTop()
 {
     setWindowFlag(Qt::WindowStaysOnTopHint, !stayOnTop());
     show();
+}
+
+void MainWindow::toggleAvoidResetTransform()
+{
+    m_graphicsView->setAvoidResetTransform(!m_graphicsView->avoidResetTransform());
 }
 
 bool MainWindow::stayOnTop() const
@@ -655,12 +748,34 @@ void MainWindow::on_actionPaste_triggered()
     }
 
     if (!clipboardImage.isNull()) {
+        setWindowTitle(tr("Image From Clipboard"));
         m_graphicsView->showImage(clipboardImage);
         clearGallery();
     } else if (clipboardFileUrl.isValid()) {
-        QString localFile(clipboardFileUrl.toLocalFile());
-        m_graphicsView->showFileFromPath(localFile, true);
-        m_pm->setCurrentFile(localFile);
+        m_graphicsView->showFileFromPath(clipboardFileUrl.toLocalFile());
+        m_pm->loadPlaylist(clipboardFileUrl);
+    }
+}
+
+void MainWindow::on_actionTrash_triggered()
+{
+    QModelIndex index = m_pm->curIndex();
+    if (!m_pm->urlByIndex(index).isLocalFile()) return;
+
+    QFile file(m_pm->localFileByIndex(index));
+    QFileInfo fileInfo(file.fileName());
+
+    QMessageBox::StandardButton result = QMessageBox::question(this, tr("Move to Trash"),
+                                                               tr("Are you sure you want to move \"%1\" to recycle bin?").arg(fileInfo.fileName()));
+    if (result == QMessageBox::Yes) {
+        bool succ = file.moveToTrash();
+        if (!succ) {
+            QMessageBox::warning(this, "Failed to move file to trash",
+                                 tr("Move to trash failed, it might caused by file permission issue, file system limitation, or platform limitation."));
+        } else {
+            m_pm->removeAt(index);
+            galleryCurrent(true, true);
+        }
     }
 }
 
@@ -677,6 +792,13 @@ void MainWindow::on_actionRotateClockwise_triggered()
     m_gv->setVisible(false);
 }
 
+void MainWindow::on_actionRotateCounterClockwise_triggered()
+{
+    m_graphicsView->rotateView(false);
+    m_graphicsView->displayScene();
+    m_gv->setVisible(false);
+}
+
 void MainWindow::on_actionPrevPicture_triggered()
 {
     galleryPrev();
@@ -687,6 +809,16 @@ void MainWindow::on_actionNextPicture_triggered()
     galleryNext();
 }
 
+void MainWindow::on_actionTogglePauseAnimation_triggered()
+{
+    m_graphicsView->scene()->togglePauseAnimation();
+}
+
+void MainWindow::on_actionAnimationNextFrame_triggered()
+{
+    m_graphicsView->scene()->skipAnimationFrame(1);
+}
+
 void MainWindow::on_actionToggleStayOnTop_triggered()
 {
     toggleStayOnTop();
@@ -695,6 +827,11 @@ void MainWindow::on_actionToggleStayOnTop_triggered()
 void MainWindow::on_actionToggleProtectMode_triggered()
 {
     toggleProtectedMode();
+}
+
+void MainWindow::on_actionToggleAvoidResetTransform_triggered()
+{
+    toggleAvoidResetTransform();
 }
 
 void MainWindow::on_actionSettings_triggered()
@@ -733,11 +870,30 @@ void MainWindow::on_actionLocateInFileManager_triggered()
     QFileInfo fileInfo(currentFileUrl.toLocalFile());
     if (!fileInfo.exists()) return;
 
+    QUrl && folderUrl = QUrl::fromLocalFile(fileInfo.absolutePath());
+
 #ifdef Q_OS_WIN
     QProcess::startDetached("explorer", QStringList() << "/select," << QDir::toNativeSeparators(fileInfo.absoluteFilePath()));
+#elif defined(Q_OS_LINUX) and defined(HAVE_QTDBUS)
+    // Use https://www.freedesktop.org/wiki/Specifications/file-manager-interface/ if possible
+    const QDBusConnectionInterface * dbusIface = QDBusConnection::sessionBus().interface();
+    if (!dbusIface || !dbusIface->isServiceRegistered(QLatin1String("org.freedesktop.FileManager1"))) {
+        QDesktopServices::openUrl(folderUrl);
+        return;
+    }
+    QDBusInterface fm1Iface(QStringLiteral("org.freedesktop.FileManager1"),
+                            QStringLiteral("/org/freedesktop/FileManager1"),
+                            QStringLiteral("org.freedesktop.FileManager1"));
+    fm1Iface.setTimeout(1000);
+    fm1Iface.callWithArgumentList(QDBus::Block, "ShowItems", {
+                                      QStringList{currentFileUrl.toString()},
+                                      QString()
+                                  });
+    if (fm1Iface.lastError().isValid()) {
+        QDesktopServices::openUrl(folderUrl);
+    }
 #else
-    // maybe use https://www.freedesktop.org/wiki/Specifications/file-manager-interface/ for linux?
-    QDesktopServices::openUrl(QUrl::fromLocalFile(fileInfo.absolutePath()));
+    QDesktopServices::openUrl(folderUrl);
 #endif // Q_OS_WIN
 }
 

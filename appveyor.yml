@@ -1,5 +1,5 @@
 image:
-  - Visual Studio 2019
+  - Visual Studio 2022
 environment:
   CMAKE_INSTALL_PREFIX: C:\projects\cmake
   LIBZ: C:\projects\zlib
@@ -8,9 +8,22 @@ environment:
   LIBEXIV2: C:\projects\exiv2
   PPKG: C:\projects\ppkg
   matrix:
-    - build_name: mingw81_64_qt5_15_2
+    - job_name: mingw_64_qt6_8
+      QTDIR: C:\Qt\6.8\mingw_64
+      MINGW64: C:\Qt\Tools\mingw1310_64
+      KF_BRANCH: master
+      EXIV2_VERSION: "0.28.3"
+      EXIV2_CMAKE_OPTIONS: "-DEXIV2_ENABLE_BROTLI=OFF -DEXIV2_ENABLE_INIH=OFF -DEXIV2_BUILD_EXIV2_COMMAND=OFF"
+      PPIC_CMAKE_OPTIONS: "-DPREFER_QT_5=OFF"
+      WINDEPLOYQT_ARGS: "--verbose=2 --no-quick-import --no-translations --no-opengl-sw --no-system-d3d-compiler --skip-plugin-types tls,networkinformation"
+    - job_name: mingw81_64_qt5_15_2
       QTDIR: C:\Qt\5.15.2\mingw81_64
       MINGW64: C:\Qt\Tools\mingw810_64
+      KF_BRANCH: kf5
+      EXIV2_VERSION: "0.27.7"
+      EXIV2_CMAKE_OPTIONS: "-DEXIV2_BUILD_SAMPLES=OFF -DEXIV2_ENABLE_WIN_UNICODE=ON -DEXIV2_BUILD_EXIV2_COMMAND=OFF"
+      PPIC_CMAKE_OPTIONS: "-DPREFER_QT_5=ON"
+      WINDEPLOYQT_ARGS: "--verbose=2 --no-quick-import --no-translations --no-opengl-sw --no-angle --no-system-d3d-compiler"
 
 install:
   - mkdir %CMAKE_INSTALL_PREFIX%
@@ -28,15 +41,15 @@ install:
 build_script:
 # prepare
   - mkdir 3rdparty
-  - cinst ninja
+  - choco install ninja
   - cd %PPKG%
   - curl -fsSL -o ppkg.exe https://github.com/BLumia/pineapple-package-manager/releases/latest/download/ppkg.exe
   - cd %APPVEYOR_BUILD_FOLDER%
 # download and install zlib for KArchive
   - cd %LIBZ%
-  - curl -fsSL -o zlib1212.zip https://zlib.net/zlib1212.zip
-  - 7z x zlib1212.zip -y
-  - cd zlib-1.2.12
+  - curl -fsSL -o zlib131.zip https://zlib.net/zlib131.zip
+  - 7z x zlib131.zip -y
+  - cd zlib-1.3.1
   - mkdir build
   - cd build
   - cmake .. -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=%CMAKE_INSTALL_PREFIX%
@@ -45,7 +58,7 @@ build_script:
   - cd %APPVEYOR_BUILD_FOLDER%
 # install ECM so we can build KImageFormats
   - cd 3rdparty
-  - git clone -q https://invent.kde.org/frameworks/extra-cmake-modules.git
+  - git clone -b %KF_BRANCH% -q https://invent.kde.org/frameworks/extra-cmake-modules.git
   - git rev-parse HEAD
   - cd extra-cmake-modules
   - cmake -G "Ninja" . -DCMAKE_INSTALL_PREFIX=%CMAKE_INSTALL_PREFIX% -DBUILD_TESTING=OFF
@@ -54,97 +67,100 @@ build_script:
   - cd %APPVEYOR_BUILD_FOLDER%
 # install AOM for libavif AV1 decoding support...
   - cd 3rdparty
-  #- git clone -b v3.2.0 --depth 1 https://aomedia.googlesource.com/aom
+  #- git clone -b v3.9.1 --depth 1 https://aomedia.googlesource.com/aom
   #- cd aom
-  #- mkdir build.libavif
-  #- cd build.libavif
+  #- mkdir build.aom
+  #- cd build.aom
   #- cmake .. -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=%CMAKE_INSTALL_PREFIX% -DENABLE_DOCS=OFF -DBUILD_SHARED_LIBS=ON -DAOM_TARGET_CPU=generic -DENABLE_TESTS=OFF -DENABLE_TESTDATA=OFF -DENABLE_TOOLS=OFF -DENABLE_EXAMPLES=0
   #- cmake --build . --config Release
   #- cmake --build . --config Release --target install/strip
   - mkdir aom
   - cd aom
-  - curl -fsSL -o ppkg-aom.zip https://sourceforge.net/projects/pineapple-package-manager/files/packages/mingw-w64-x86_64-windows/aom-3.2.0-2.zip
+  - curl -fsSL -o ppkg-aom.zip https://sourceforge.net/projects/pineapple-package-manager/files/packages/mingw-w64-x86_64-windows/aom-3.9.1-2.zip
   - ppkg ppkg-aom.zip
   - 7z x ppkg-aom.zip LICENSE -y
   - cd %APPVEYOR_BUILD_FOLDER%
 # install libavif for avif format support of KImageFormats
   - cd %LIBAVIF%
-  - curl -fsSL -o libavif-v0_9_0.zip https://github.com/AOMediaCodec/libavif/archive/v0.9.0.zip
-  - 7z x libavif-v0_9_0.zip -y
-  - cd libavif-0.9.0
+  - curl -fsSL -o libavif-v1_1_1.zip https://github.com/AOMediaCodec/libavif/archive/v1.1.1.zip
+  - 7z x libavif-v1_1_1.zip -y
+  - cd libavif-1.1.1
   - mkdir build
   - cd build
-  - cmake .. -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=%CMAKE_INSTALL_PREFIX% -DAVIF_CODEC_AOM=ON
+  - cmake .. -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=%CMAKE_INSTALL_PREFIX% -DAVIF_CODEC_AOM=ON -DAVIF_LOCAL_LIBYUV=ON
   - cmake --build . --config Release
   - cmake --build . --config Release --target install/strip
   - cd %APPVEYOR_BUILD_FOLDER%
 # install KArchive for kra format support of KImageFormats
   - cd 3rdparty
-  - git clone -q https://invent.kde.org/frameworks/karchive.git
+  - git clone -b %KF_BRANCH% -q https://invent.kde.org/frameworks/karchive.git
   - git rev-parse HEAD
   - cd karchive
   - mkdir build
   - cd build
-  - cmake .. -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=%CMAKE_INSTALL_PREFIX%
+  - cmake .. -G "Ninja" -DWITH_LIBZSTD=OFF -DWITH_BZIP2=OFF -DWITH_LIBLZMA=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=%CMAKE_INSTALL_PREFIX%
   - cmake --build . --config Release
   - cmake --build . --config Release --target install/strip
   - cd %APPVEYOR_BUILD_FOLDER%
 # build libexpat for libexiv2
   - cd %LIBEXPAT%
-  - curl -fsSL -o R_2_4_1.zip https://github.com/libexpat/libexpat/archive/R_2_4_1.zip
-  - 7z x R_2_4_1.zip -y
-  - cd libexpat-R_2_4_1/expat/
+  - curl -fsSL -o R_2_6_2.zip https://github.com/libexpat/libexpat/archive/R_2_6_2.zip
+  - 7z x R_2_6_2.zip -y
+  - cd libexpat-R_2_6_2/expat/
   - cmake -G "Ninja" . -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=%CMAKE_INSTALL_PREFIX% -DEXPAT_BUILD_EXAMPLES=OFF -DEXPAT_BUILD_TESTS=OFF -DEXPAT_BUILD_TOOLS=OFF
   - cmake --build . --target install/strip
   - cd %APPVEYOR_BUILD_FOLDER%
 # build libexiv2
   - cd %LIBEXIV2%
-  - curl -fsSL -o v0.27.5.zip https://github.com/Exiv2/exiv2/archive/v0.27.5.zip
-  - 7z x v0.27.5.zip -y
-  - cd exiv2-0.27.5
-  - cmake -G "Ninja" . -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=%CMAKE_INSTALL_PREFIX% -DEXIV2_BUILD_SAMPLES=OFF -DEXIV2_ENABLE_WIN_UNICODE=ON
+  - curl -fsSL -o v%EXIV2_VERSION%.zip https://github.com/Exiv2/exiv2/archive/v%EXIV2_VERSION%.zip
+  - 7z x v%EXIV2_VERSION%.zip -y
+  - cd exiv2-%EXIV2_VERSION%
+  - cmake -G "Ninja" . -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=%CMAKE_INSTALL_PREFIX% %EXIV2_CMAKE_OPTIONS%
   - cmake --build . --target install/strip
   - cd %APPVEYOR_BUILD_FOLDER%
 # install KImageFormats
   - cd 3rdparty
-  - git clone -q https://invent.kde.org/frameworks/kimageformats.git
+  - git clone -b %KF_BRANCH% -q https://invent.kde.org/frameworks/kimageformats.git
   - git rev-parse HEAD
   - cd kimageformats
   - mkdir build
   - cd build
-  - cmake .. -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DKDE_INSTALL_QTPLUGINDIR=%QTDIR%\plugins
+  - cmake .. -G "Ninja" -DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release -DKDE_INSTALL_QTPLUGINDIR=%QTDIR%\plugins
   - cmake --build . --config Release
   - cmake --build . --config Release --target install/strip
   - cd %APPVEYOR_BUILD_FOLDER%
 # finally...
   - mkdir build
   - cd build
-  - cmake .. -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_MAKE_PROGRAM=mingw32-make -DCMAKE_INSTALL_PREFIX='%cd%'
+  - cmake .. -G "Ninja" %PPIC_CMAKE_OPTIONS% -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=%CMAKE_INSTALL_PREFIX% -DCMAKE_INSTALL_PREFIX='%cd%'
   - cmake --build . --config Release
   - cmake --build . --config Release --target install/strip
 # fixme: I don't know how to NOT make the binary installed to the ./bin/ folder...
   - cd bin
-  - copy %APPVEYOR_BUILD_FOLDER%\LICENSE .
+  - copy %APPVEYOR_BUILD_FOLDER%\LICENSE
   - copy %CMAKE_INSTALL_PREFIX%\bin\libaom.dll
-  - copy %CMAKE_INSTALL_PREFIX%\bin\libexpat.dll
+  - copy %CMAKE_INSTALL_PREFIX%\bin\libexpat-1.dll
   - copy %CMAKE_INSTALL_PREFIX%\bin\libexiv2.dll
   - copy %CMAKE_INSTALL_PREFIX%\bin\libavif.dll
   - copy %CMAKE_INSTALL_PREFIX%\bin\libzlib.dll
-  - copy C:\projects\cmake\bin\libKF5Archive.dll .
-  - windeployqt --verbose=2 --no-quick-import --no-translations --no-opengl-sw --no-angle --no-system-d3d-compiler .\ppic.exe
+  - copy %CMAKE_INSTALL_PREFIX%\bin\libKF?Archive.dll
+  - windeployqt %WINDEPLOYQT_ARGS% .\ppic.exe
 # copy 3rdparty licenses for the libs we vendored for windows...
   - mkdir licenses
   - cd licenses
   - copy %APPVEYOR_BUILD_FOLDER%\3rdparty\aom\LICENSE License.aom.txt
   - copy %APPVEYOR_BUILD_FOLDER%\3rdparty\karchive\LICENSES\LGPL-2.0-or-later.txt License.KArchive.txt
   - copy %APPVEYOR_BUILD_FOLDER%\3rdparty\kimageformats\LICENSES\LGPL-2.1-or-later.txt License.kimageformats.txt
-  - copy %LIBEXPAT%\libexpat-R_2_4_1\expat\COPYING License.expat.txt
-  - copy %LIBAVIF%\libavif-0.9.0\LICENSE License.libavif.txt
-  - copy %LIBEXIV2%\exiv2-0.27.5\COPYING License.exiv2.txt
+  - copy %LIBEXPAT%\libexpat-R_2_6_2\expat\COPYING License.expat.txt
+  - copy %LIBAVIF%\libavif-1.1.1\LICENSE License.libavif.txt
+  - copy %LIBEXIV2%\exiv2-%EXIV2_VERSION%\COPYING License.exiv2.txt
 # TODO: Qt, zlib
   - cd ..
 # for debug..
   - tree /f
+  - cd %APPVEYOR_BUILD_FOLDER%
+  - xcopy %CMAKE_INSTALL_PREFIX% .\cmake-prefix-copy /E /H /C /I
 
 artifacts:
   - path: build\bin
+  - path: cmake-prefix-copy

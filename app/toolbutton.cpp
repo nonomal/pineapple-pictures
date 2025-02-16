@@ -1,5 +1,10 @@
+// SPDX-FileCopyrightText: 2022 Gary Wang <wzc782970009@gmail.com>
+//
+// SPDX-License-Identifier: MIT
+
 #include "toolbutton.h"
 
+#include "actionmanager.h"
 #include "opacityhelper.h"
 
 #include <QPainter>
@@ -20,6 +25,11 @@ ToolButton::ToolButton(bool hoverColor, QWidget *parent)
                "}";
     }
     setStyleSheet(qss);
+}
+
+void ToolButton::setIconResourcePath(const QString &iconp)
+{
+    this->setIcon(ActionManager::loadHidpiIcon(iconp, this->iconSize()));
 }
 
 void ToolButton::setOpacity(qreal opacity, bool animated)

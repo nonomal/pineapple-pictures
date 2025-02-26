@@ -1,31 +1,54 @@
-project (pineapple-pictures)
+# SPDX-FileCopyrightText: 2022 - 2025 Gary Wang <git@blumia.net>
+#
+# SPDX-License-Identifier: MIT
 
-cmake_minimum_required (VERSION 3.9.5)
+cmake_minimum_required(VERSION 3.16)
 
-list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
+project(pineapple-pictures VERSION 0.9.2) # don't forget to update NEWS file and AppStream metadata.
 
-include (GNUInstallDirs)
-include (FeatureSummary)
-
-set (CMAKE_AUTOMOC ON)
-set (CMAKE_AUTORCC ON)
-set (QT_MINIMUM_VERSION "5.10")
+include(GNUInstallDirs)
+include(FeatureSummary)
 
 option (EXIV2_METADATA_SUPPORT "Better image metadata support via libexiv2" ON)
+option (PREFER_QT_5 "Prefer to use Qt 5" OFF)
+option (TRANSLATION_RESOURCE_EMBEDDING "Embedding .qm translation files inside resource" OFF)
 
-find_package(Qt5 ${QT_MINIMUM_VERSION} CONFIG REQUIRED Widgets Svg LinguistTools)
+set (CMAKE_CXX_STANDARD 17)
+set (CMAKE_CXX_STANDARD_REQUIRED ON)
+set (CMAKE_AUTOMOC ON)
+set (CMAKE_AUTORCC ON)
+
+if (PREFER_QT_5)
+    find_package(QT NAMES Qt5 REQUIRED COMPONENTS Core)
+else ()
+    find_package(QT NAMES Qt6 REQUIRED COMPONENTS Core)
+endif ()
+
+if (${QT_VERSION_MAJOR} EQUAL "5")
+    set (QT_MINIMUM_VERSION "5.15.2")
+else ()
+    set (QT_MINIMUM_VERSION "6.4")
+endif ()
+
+find_package(Qt${QT_VERSION_MAJOR} ${QT_MINIMUM_VERSION} REQUIRED
+    COMPONENTS Widgets Svg LinguistTools
+    OPTIONAL_COMPONENTS DBus
+)
+
+if (${QT_VERSION_MAJOR} EQUAL "6")
+    find_package(Qt${QT_DEFAULT_MAJOR_VERSION} ${QT_MINIMUM_VERSION} CONFIG REQUIRED SvgWidgets)
+endif ()
 
 if (EXIV2_METADATA_SUPPORT)
-    find_package(LibExiv2)
-    set_package_properties(LibExiv2 PROPERTIES
+    find_package(exiv2)
+    set_package_properties(exiv2 PROPERTIES
         URL "https://www.exiv2.org"
         DESCRIPTION "image metadata support"
-        TYPE OPTIONAL
+        TYPE RECOMMENDED
         PURPOSE "Bring better image metadata support"
     )
 endif ()
 
-#LibExiv2_FOUND
 set (PPIC_CPP_FILES
     app/main.cpp
     app/framelesswindow.cpp
@@ -44,6 +67,8 @@ set (PPIC_CPP_FILES
     app/metadatadialog.cpp
     app/exiv2wrapper.cpp
     app/playlistmanager.cpp
+    app/shortcutedit.cpp
+    app/fileopeneventhandler.cpp
 )
 
 set (PPIC_HEADER_FILES
@@ -63,6 +88,8 @@ set (PPIC_HEADER_FILES
     app/metadatadialog.h
     app/exiv2wrapper.h
     app/playlistmanager.h
+    app/shortcutedit.h
+    app/fileopeneventhandler.h
 )
 
 set (PPIC_QRC_FILES
@@ -79,8 +106,6 @@ set (EXE_NAME ppic)
 file (GLOB PPIC_TS_FILES app/translations/*.ts)
 set (PPIC_CPP_FILES_FOR_I18N ${PPIC_CPP_FILES})
 
-qt5_create_translation(PPIC_QM_FILES ${PPIC_CPP_FILES_FOR_I18N} ${PPIC_TS_FILES})
-
 if (WIN32)
     list(APPEND PPIC_RC_FILES assets/pineapple-pictures.rc)
 endif ()
@@ -90,32 +115,49 @@ add_executable (${EXE_NAME}
     ${PPIC_CPP_FILES}
     ${PPIC_QRC_FILES}
     ${PPIC_RC_FILES}
-    ${PPIC_QM_FILES}
 )
 
-target_link_libraries (${EXE_NAME} Qt5::Widgets Qt5::Svg)
+if (${QT_VERSION_MAJOR} EQUAL "6")
+    if (TRANSLATION_RESOURCE_EMBEDDING)
+        qt_add_translations(${EXE_NAME} TS_FILES ${PPIC_TS_FILES})
+    else()
+        qt_add_translations(${EXE_NAME} TS_FILES ${PPIC_TS_FILES} QM_FILES_OUTPUT_VARIABLE PPIC_QM_FILES)
+    endif()
+else()
+    qt_create_translation(PPIC_QM_FILES ${PPIC_CPP_FILES_FOR_I18N} ${PPIC_TS_FILES})
+endif()
 
-if (LibExiv2_FOUND)
-    message(INFO ${LibExiv2_INCLUDE_DIRS})
-    target_include_directories(${EXE_NAME}
-    PRIVATE
-        ${LibExiv2_INCLUDE_DIRS}
-    )
+target_sources(${EXE_NAME} PRIVATE ${PPIC_QM_FILES})
+
+target_link_libraries (${EXE_NAME} Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::Svg)
+if (${QT_VERSION_MAJOR} EQUAL "6")
+    target_link_libraries (${EXE_NAME} Qt::SvgWidgets)
+endif ()
+
+if (exiv2_FOUND)
+    if(NOT TARGET Exiv2::exiv2lib AND TARGET exiv2lib)
+        # for exiv2 0.27.x
+        add_library(Exiv2::exiv2lib ALIAS exiv2lib)
+    endif()
     target_link_libraries (${EXE_NAME}
-        LibExiv2::LibExiv2
+        Exiv2::exiv2lib
     )
     target_compile_definitions(${EXE_NAME} PRIVATE
-        HAVE_EXIV2_VERSION="${LibExiv2_VERSION}"
+        HAVE_EXIV2_VERSION="${exiv2_VERSION}"
     )
 endif ()
 
+if (TARGET Qt5::DBus OR TARGET Qt6::DBus)
+    target_link_libraries (${EXE_NAME}
+        Qt${QT_VERSION_MAJOR}::DBus
+    )
+    target_compile_definitions(${EXE_NAME} PRIVATE
+        HAVE_QTDBUS
+    )
+endif()
+
 # Extra build settings
 if (WIN32)
-    set_property (
-        TARGET ${EXE_NAME}
-        PROPERTY WIN32_EXECUTABLE true
-    )
-
     target_compile_definitions(${EXE_NAME} PRIVATE
         FLAG_PORTABLE_MODE_SUPPORT=1
     )
@@ -146,6 +188,7 @@ macro (ppic_set_version_via_describe _describe_long)
 endmacro ()
 
 # Version setup
+target_compile_definitions(${EXE_NAME} PRIVATE PPIC_VERSION_STRING="${CMAKE_PROJECT_VERSION}")
 if (EXISTS "${CMAKE_SOURCE_DIR}/.git")
     find_package(Git)
     set_package_properties(Git PROPERTIES TYPE OPTIONAL PURPOSE "Determine exact build version.")
@@ -163,34 +206,36 @@ if (EXISTS "${CMAKE_SOURCE_DIR}/.git")
     endif ()
 endif ()
 
-# Helper macros for install settings
-macro (ppic_convert_to_relative_path _var)
-    # Make sure _var is a relative path
-    if (IS_ABSOLUTE "${${_var}}")
-        file (RELATIVE_PATH ${_var} "${CMAKE_INSTALL_PREFIX}" "${${_var}}")
-    endif ()
-endmacro ()
-
 # Install settings
 if (WIN32)
-    # FIXME: try to avoid install to a "bin" subfolder under windows...
-    #        when fixed, don't forget to update the CI config file...
-    set (BIN_INSTALL_DIR "") # seems useless, don't know why...
+    set_target_properties(${EXE_NAME} PROPERTIES
+        WIN32_EXECUTABLE TRUE
+    )
+elseif (APPLE)
+    set_source_files_properties(assets/icons/app-icon.icns PROPERTIES
+        MACOSX_PACKAGE_LOCATION "Resources"
+    )
+    target_sources(${EXE_NAME} PUBLIC assets/icons/app-icon.icns)
+    # See https://cmake.org/cmake/help/v3.15/prop_tgt/MACOSX_BUNDLE_INFO_PLIST.html
+    set_target_properties(${EXE_NAME} PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/dist/MacOSXBundleInfo.plist.in
+        MACOSX_BUNDLE_BUNDLE_NAME "Pineapple Pictures"
+        MACOSX_BUNDLE_GUI_IDENTIFIER net.blumia.pineapple-pictures
+        MACOSX_BUNDLE_ICON_FILE app-icon.icns # contains the .icns file name, *without* the path.
+        MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
+        MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
+    )
 elseif (UNIX)
     if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
         set(CMAKE_INSTALL_PREFIX /usr)
     endif ()
 
-    set (BIN_INSTALL_DIR "${CMAKE_INSTALL_BINDIR}") # relative, usually "bin"
-    ppic_convert_to_relative_path(BIN_INSTALL_DIR)
-    set (LIB_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}") # "lib" or "lib64"
-    ppic_convert_to_relative_path(LIB_INSTALL_DIR)
-
     # install icon
     install (
         FILES assets/icons/app-icon.svg
-        DESTINATION "${CMAKE_INSTALL_DATADIR}/icons/hicolor/48x48/apps"
-        RENAME pineapple-pictures.svg
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps"
+        RENAME net.blumia.pineapple-pictures.svg
     )
 
     # install shortcut
@@ -207,9 +252,10 @@ elseif (UNIX)
 endif()
 
 set (INSTALL_TARGETS_DEFAULT_ARGS
-    RUNTIME DESTINATION ${BIN_INSTALL_DIR}
-    LIBRARY DESTINATION ${LIB_INSTALL_DIR}
-    ARCHIVE DESTINATION ${LIB_INSTALL_DIR} COMPONENT Devel
+    BUNDLE DESTINATION .
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT Devel
 )
 
 install (
@@ -217,19 +263,25 @@ install (
     ${INSTALL_TARGETS_DEFAULT_ARGS}
 )
 
-if (WIN32)
+if (TRANSLATION_RESOURCE_EMBEDDING)
+    target_compile_definitions(${EXE_NAME}
+        PRIVATE TRANSLATION_RESOURCE_EMBEDDING
+    )
+elseif (WIN32)
     set (QM_FILE_INSTALL_DIR "${CMAKE_INSTALL_BINDIR}/translations")
-else ()
+else()
     set (QM_FILE_INSTALL_DIR "${CMAKE_INSTALL_FULL_DATADIR}/pineapple-pictures/translations")
     target_compile_definitions(${EXE_NAME}
-        PRIVATE QM_FILE_INSTALL_DIR=${QM_FILE_INSTALL_DIR}
+        PRIVATE QM_FILE_INSTALL_ABSOLUTE_DIR=${QM_FILE_INSTALL_DIR}
     )
-endif ()
+endif()
 
-install (
-    FILES ${PPIC_QM_FILES}
-    DESTINATION ${QM_FILE_INSTALL_DIR}
-)
+if (DEFINED QM_FILE_INSTALL_DIR)
+    install(
+        FILES ${PPIC_QM_FILES}
+        DESTINATION ${QM_FILE_INSTALL_DIR}
+    )
+endif()
 
 feature_summary(WHAT ALL INCLUDE_QUIET_PACKAGES FATAL_ON_MISSING_REQUIRED_PACKAGES)
 
@@ -245,7 +297,7 @@ elseif (APPLE)
     # ...
 elseif (UNIX)
     set (CPACK_SYSTEM_NAME "${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
-    set (CPACK_DEBIAN_PACKAGE_SHILIBDEPS ON)
+    set (CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
     set (CPACK_DEBIAN_PACKAGE_RECOMMENDS "kimageformat-plugins")
 endif()
 

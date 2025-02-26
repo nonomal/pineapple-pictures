@@ -2,8 +2,15 @@
 *.user
 *.user.*
 
+# Why, macOS, why?
+.DS_Store
+
 # Translation files
 *.qm
+*.mo
 
 # Generic Build Dir
 [Bb]uild/
+
+# IDE/Editor config folders
+.vscode/

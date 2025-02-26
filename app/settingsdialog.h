@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2022 Gary Wang <wzc782970009@gmail.com>
+//
+// SPDX-License-Identifier: MIT
+
 #ifndef SETTINGSDIALOG_H
 #define SETTINGSDIALOG_H
 
@@ -19,9 +23,11 @@ public slots:
 
 private:
     QCheckBox * m_stayOnTop = nullptr;
+    QCheckBox * m_useLightCheckerboard = nullptr;
     QComboBox * m_doubleClickBehavior = nullptr;
     QComboBox * m_mouseWheelBehavior = nullptr;
     QComboBox * m_initWindowSizeBehavior = nullptr;
+    QComboBox * m_hiDpiRoundingPolicyBehavior = nullptr;
 };
 
 #endif // SETTINGSDIALOG_H

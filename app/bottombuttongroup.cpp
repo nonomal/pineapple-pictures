@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2022 Gary Wang <wzc782970009@gmail.com>
+//
+// SPDX-License-Identifier: MIT
+
 #include "bottombuttongroup.h"
 
 #include "opacityhelper.h"
@@ -33,7 +37,7 @@ BottomButtonGroup::BottomButtonGroup(const std::vector<QAction *> &actionList, Q
     auto newActionBtn = [this](QAction * action) -> QToolButton * {
         QToolButton * btn = new QToolButton(this);
         btn->setDefaultAction(action);
-        btn->setIconSize(QSize(40, 40));
+        btn->setIconSize(QSize(32, 32));
         btn->setFixedSize(40, 40);
         return btn;
     };

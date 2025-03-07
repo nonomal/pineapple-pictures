@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2022 Gary Wang <wzc782970009@gmail.com>
+//
+// SPDX-License-Identifier: MIT
+
 #ifndef GRAPHICSVIEW_H
 #define GRAPHICSVIEW_H
 
@@ -11,7 +15,7 @@ class GraphicsView : public QGraphicsView
 public:
     GraphicsView(QWidget *parent = nullptr);
 
-    void showFileFromPath(const QString &filePath, bool requestGallery = false);
+    void showFileFromPath(const QString &filePath);
 
     void showImage(const QPixmap &pixmap);
     void showImage(const QImage &image);
@@ -36,12 +40,14 @@ public:
     bool isSceneBiggerThanView() const;
     void setEnableAutoFitInView(bool enable = true);
 
+    bool avoidResetTransform() const;
+    void setAvoidResetTransform(bool avoidReset);
+
     static QTransform resetScale(const QTransform & orig);
 
 signals:
     void navigatorViewRequired(bool required, QTransform transform);
     void viewportRectChanged();
-    void requestGallery(const QString &filePath);
 
 public slots:
     void toggleCheckerboard(bool invertCheckerboardColor = false);
@@ -53,10 +59,6 @@ private:
     void wheelEvent(QWheelEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
 
-    void dragEnterEvent(QDragEnterEvent *event) override;
-    void dragMoveEvent(QDragMoveEvent *event) override;
-    void dropEvent(QDropEvent *event) override;
-
     bool isThingSmallerThanWindowWith(const QTransform &transform) const;
     bool shouldIgnoreMousePressMoveEvent(const QMouseEvent *event) const;
     void setCheckerboardEnabled(bool enabled, bool invertColor = false);
@@ -66,8 +68,9 @@ private:
     // ... or even more? e.g. "fit/snap width" things...
     // Currently it's "no fit" when it's false and "fit when view is smaller" when it's true.
     bool m_enableFitInView = false;
+    bool m_avoidResetTransform = false;
     bool m_checkerboardEnabled = false;
-    bool m_isLastCheckerboardColorInverted = false;
+    bool m_useLightCheckerboard = false;
 };
 
 #endif // GRAPHICSVIEW_H

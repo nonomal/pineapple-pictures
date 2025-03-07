@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2022 Gary Wang <wzc782970009@gmail.com>
+//
+// SPDX-License-Identifier: MIT
+
 #ifndef ACTIONMANAGER_H
 #define ACTIONMANAGER_H
 
@@ -15,6 +19,8 @@ public:
     void retranslateUi(MainWindow *MainWindow);
     void setupShortcuts();
 
+    static QIcon loadHidpiIcon(const QString &resp, QSize sz = QSize(32, 32));
+
 public:
     QAction *actionOpen;
 
@@ -24,9 +30,13 @@ public:
     QAction *actionZoomOut;
     QAction *actionToggleCheckerboard;
     QAction *actionRotateClockwise;
+    QAction *actionRotateCounterClockwise;
 
     QAction *actionPrevPicture;
     QAction *actionNextPicture;
+
+    QAction *actionTogglePauseAnimation;
+    QAction *actionAnimationNextFrame;
 
     QAction *actionHorizontalFlip;
     QAction *actionFitInView;
@@ -34,8 +44,10 @@ public:
     QAction *actionCopyPixmap;
     QAction *actionCopyFilePath;
     QAction *actionPaste;
+    QAction *actionTrash;
     QAction *actionToggleStayOnTop;
     QAction *actionToggleProtectMode;
+    QAction *actionToggleAvoidResetTransform;
     QAction *actionSettings;
     QAction *actionHelp;
     QAction *actionLocateInFileManager;

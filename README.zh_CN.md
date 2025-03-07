@@ -2,23 +2,30 @@
 
 |CI|构建状态|
 |---|---|
-|Windows Build|[![Windows build status](https://ci.appveyor.com/api/projects/status/dbd8clww3cit6oa0/branch/master?svg=true)](https://ci.appveyor.com/project/BLumia/pineapplepictures/branch/master)|
-|macOS Build|![macOS CI](https://github.com/BLumia/pineapple-pictures/workflows/macOS%20CI/badge.svg)|
-|Ubuntu 20.04 Build|![Ubuntu 20.04 CI](https://github.com/BLumia/pineapple-pictures/workflows/Ubuntu%2020.04%20CI/badge.svg)|
+|Windows Build|[![Windows CI](https://github.com/BLumia/pineapple-pictures/actions/workflows/windows.yml/badge.svg)](https://github.com/BLumia/pineapple-pictures/actions/workflows/windows.yml)|
+|macOS Build|[![macOS CI](https://github.com/BLumia/pineapple-pictures/actions/workflows/macos.yml/badge.svg)](https://github.com/BLumia/pineapple-pictures/actions/workflows/macos.yml)|
+|Ubuntu Build|[![Ubuntu CI](https://github.com/BLumia/pineapple-pictures/actions/workflows/ubuntu.yml/badge.svg)](https://github.com/BLumia/pineapple-pictures/actions/workflows/ubuntu.yml)|
 
 ![Pineapple Pictures - Main Window](https://repository-images.githubusercontent.com/211888654/e8697600-e370-11eb-9b2a-b71e05262954)
 
 ## 简介
 
-菠萝看图是一个轻量图像查看器，允许你简单快捷的查看 JPEG, PNG, GIF, SVG, PSD, KRA, XCF, TGA, AVIF 等常用格式的图像文件，并提供了置顶窗口的选项以便你在使用其它软件时也可以将参考图片固定在顶端。
+菠萝看图是一个轻量图像查看器，允许你简单快捷的查看 JPEG, PNG, GIF, SVG, PSD, KRA, XCF, TGA, HDR, AVIF 等常用格式的图像文件，并提供了置顶窗口的选项以便你在使用其它软件时也可以将参考图片固定在顶端。
 
 ## 立即获取!
 
- - [GitHub Release 页面](https://github.com/BLumia/pineapple-pictures/releases) | [gitee 发布页面](https://gitee.com/blumia/pineapple-pictures/releases)
- - [SourceForge](https://sourceforge.net/projects/pineapple-pictures/)
- - Archlinux AUR: [pineapple-pictures](https://aur.archlinux.org/packages/pineapple-pictures/) | [pineapple-pictures-git](https://aur.archlinux.org/packages/pineapple-pictures-git/)
- - Debian (自 bullseye 起) 或 Ubuntu (自 21.04 起): `sudo apt install pineapple-pictures`
- - [Itch.io 商店](https://blumia.itch.io/pineapple-pictures)
+### 由原作者维护
+
+- [GitHub Release 页面](https://github.com/BLumia/pineapple-pictures/releases) | [gitee 发布页面](https://gitee.com/blumia/pineapple-pictures/releases)
+- [SourceForge](https://sourceforge.net/projects/pineapple-pictures/)
+- Archlinux AUR: [pineapple-pictures](https://aur.archlinux.org/packages/pineapple-pictures/) | [pineapple-pictures-git](https://aur.archlinux.org/packages/pineapple-pictures-git/)
+- [Itch.io 商店](https://blumia.itch.io/pineapple-pictures)
+- Flatpak (于 FlatHub): [net.blumia.pineapple-pictures](https://flathub.org/apps/net.blumia.pineapple-pictures) *([我应当使用 flatpak 版吗？](https://github.com/BLumia/pineapple-pictures/wiki/Container%E2%80%90based-Packaging-Solutions-Support))*
+
+### 由贡献者/对应发行版的打包人员维护
+
+- Debian (自 bullseye 起) 或 Ubuntu (自 21.04 起): `sudo apt install pineapple-pictures`
+- Nix / NixOS: [pineapple-pictures](https://search.nixos.org/packages?channel=unstable&show=pineapple-pictures&from=0&size=50&sort=relevance&type=packages&query=pineapple-pictures) (由 [@wineee](https://github.com/wineee) 维护)
 
 ## 帮助翻译!
 
@@ -29,7 +36,7 @@
 当前状态，我们需要先确保如下依赖可用:
 
  - `cmake`: 我们所使用的构建系统
- - 包含 `qt5-svg` 与 `qt5-tools` 组件的 `qt5`: 此应用基于 Qt
+ - 包含 `qt6-svg` 与 `qt6-tools` 组件的 `qt6`: 此应用基于 Qt
  - `libexiv2`: 用以获取和显示更多的图像元信息（可选，推荐）
 
 然后我们就可以使用任何常规的 c++ 编译器如 g++ 或 msvc 来进行构建了
@@ -48,27 +55,10 @@ $ cmake --build . # 如果你使用 Makefile 作为 CMake 生成器，也可以�
 
 此应用的图片格式支持依赖于 Qt 的 imageformats 插件，直接从您所用的发行版获取对应的图像格式插件即可。对于 Windows 用户，您可能需要手动构建和使用图像格式插件。下方给出了进一步的说明。
 
-### Linux
+在 Windows、Linux 以及 macOS 系统均可构建此应用，其它有移植 Qt 支持的平台也可能可以进行构建。若要了解一些平台相关的构建指引，请参阅[相关的 Wiki 页面](https://github.com/BLumia/pineapple-pictures/wiki/Platform-Specific-Build-Instructions)。
 
-常规的构建步骤即可完成构建，不需要额外的处理步骤 ;)
-
-对于 Archlinux 发行版的用户，这里还有一个 [PKGBUILD](https://aur.archlinux.org/cgit/aur.git/tree/PKGBUILD?h=pineapple-pictures-git) 可供使用和参考。
-
-对于在基于 debian 的发行版中进行打包的需求， `CMakeLists.txt` 已经提供了一些基本的 cpack 配置以便生成一个有效的 `.deb` 软件包。在构建步骤完毕后，使用 `cpack -G DEB` 即可生成 DEB 软件包。您也可以参考 `.github/workflows/ubuntu.yml` 来查看当前正在使用的 CI 配置是如何进行打包的。
-
-目前，`DEB` 是当前唯一受到直接支持的 cpack 生成目标。若希望为此项目添加其它的 cpack 目标支持，欢迎发起合并请求。
-
-### Windows
-
-上述的构建步骤在 Windows 中也适用，但由于 Windows 中不具备类如大多 Linux 发行版中所提供的方便的软件包管理机制，故如果您需要任何 Qt 官方支持之外的图像格式例如 psd，xcf，kra 等格式的支持，你就可能需要自行获取并构建对应的 imageformats 插件，并在您最终生成的可执行文件中一并提供这些插件。若您不需要这些额外的图像格式支持，这个步骤也可以直接跳过。
-
-我们所提供的预编译好的 Windows 程序包含了 kimageformats 插件来提供额外（kra, xcf, psd 等）格式的支持。您可以参考 `appveyor.yml` 来查看我们是如何构建并打包 Windows 可执行程序的。
-
-[KDE Craft](https://community.kde.org/Craft) 环境也可以被用来构建此应用程序。我也创建了一个蓝图来进行此项目的构建和打包，可参见[这里](https://github.com/BearKidsTeam/craft-shmooprint-bkt)。尽管这不是我用于构建发布二进制所使用的方案，但仍值得一试。
-
-### macOS
-
-由于我没有 mac 设备，故 macOS 暂时不受任何支持。不过我们目前有一个 GitHub Action 来执行 macOS 环境下的构建（见 `.github/workflows/macos.yml`）所以至少 macOS 下是可以顺利进行构建的。如果您想完善对 macOS 的支持，也欢迎您创建合并请求 ;P
+> [!NOTE]
+> 尽管存在一个可用于 QMake 构建的 `pineapple-pictures.pro` 文件，但其仅供简单测试所用且其并不包含 `exiv2` 支持。使用 QMake 构建此项目是 **不受支持** 的，请尽可能考虑使用 CMake。
 
 ## 许可协议
 

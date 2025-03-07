@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2022 Gary Wang <wzc782970009@gmail.com>
+//
+// SPDX-License-Identifier: MIT
+
 #include "aboutdialog.h"
 
 #include <QAbstractButton>
@@ -37,18 +41,25 @@ AboutDialog::AboutDialog(QWidget *parent)
         QStringLiteral("<li><b>%1</b>:<br/>%2</li>")
                 .arg(QCoreApplication::translate("MainWindow", "Protected mode"))
                 .arg(tr("Avoid close window accidentally. (eg. by double clicking the window)")),
+        QStringLiteral("<li><b>%1</b>:<br/>%2</li>")
+                .arg(QCoreApplication::translate("MainWindow", "Keep transformation", "The 'transformation' means the flip/rotation status that currently applied to the image view"))
+                .arg(tr("Avoid resetting the zoom/rotation/flip state that was applied to the image view when switching between images.")),
         QStringLiteral("</ul>")
     };
 
     const QStringList aboutStr {
         QStringLiteral("<center><img width='128' height='128' src=':/icons/app-icon.svg'/><br/>"),
         qApp->applicationDisplayName(),
+        (QStringLiteral("<br/>") + tr("Version: %1").arg(
 #ifdef GIT_DESCRIBE_VERSION_STRING
-        (QStringLiteral("<br/>") + tr("Version: %1").arg(GIT_DESCRIBE_VERSION_STRING)),
+            GIT_DESCRIBE_VERSION_STRING
+#else
+            qApp->applicationVersion()
 #endif // GIT_DESCRIBE_VERSION_STRING
+        )),
         QStringLiteral("<hr/>"),
         tr("Copyright (c) %1 %2", "%1 is year, %2 is the name of copyright holder(s)")
-            .arg(QStringLiteral("2022"), QStringLiteral("<a href='https://github.com/BLumia'>@BLumia</a>")),
+            .arg(QStringLiteral("2025"), QStringLiteral("<a href='https://github.com/BLumia'>@BLumia</a>")),
         QStringLiteral("<br/>"),
         tr("Logo designed by %1").arg(QStringLiteral("<a href='https://github.com/Lovelyblack'>@Lovelyblack</a>")),
         QStringLiteral("<hr/>"),
@@ -59,7 +70,7 @@ AboutDialog::AboutDialog(QWidget *parent)
 
     QFile translaterHtml(":/plain/translators.html");
     bool canOpenFile = translaterHtml.open(QIODevice::ReadOnly);
-    const QByteArray & translatorList = canOpenFile ? translaterHtml.readAll() : "";
+    const QByteArray & translatorList = canOpenFile ? translaterHtml.readAll() : QByteArrayLiteral("");
 
     const QStringList specialThanksStr {
         QStringLiteral("<h1 align='center'>%1</h1><a href='%2'>%3</a><p>%4</p>").arg(
@@ -92,7 +103,7 @@ AboutDialog::AboutDialog(QWidget *parent)
 
     const QString mitLicense(QStringLiteral(R"(Expat/MIT License
 
-Copyright (c) 2020 BLumia
+Copyright (c) 2025 BLumia
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
